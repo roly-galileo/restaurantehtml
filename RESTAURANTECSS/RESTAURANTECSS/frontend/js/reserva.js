@@ -1,163 +1,323 @@
-const form = document.getElementById("formReserva");
+/* =========================================================
+   ESPERAR A QUE TODA LA PÁGINA CARGUE
+   =========================================================
+   Este evento se ejecuta cuando el HTML ya está listo.
+   Así evitamos errores al buscar elementos que aún no existen.
+*/
+document.addEventListener("DOMContentLoaded", () => {
+
+
+/* =========================================================
+   OBTENER ELEMENTOS DEL HTML
+   =========================================================
+   Guardamos en variables los elementos que usaremos
+   para poder manipularlos desde JavaScript.
+*/
+
+const form = document.getElementById("formReserva");          // Formulario
+const mensaje = document.getElementById("mensaje");          // Mensajes
+const respuesta = document.getElementById("respuestaBackend"); // Card respuesta
+const detalle = document.getElementById("detalleReserva");   // Texto detalle
+
+// Inputs del formulario
 const nombre = document.getElementById("nombre");
 const telefono = document.getElementById("telefono");
 const fecha = document.getElementById("fecha");
 const inicio = document.getElementById("inicio");
 const final = document.getElementById("final");
+const personas = document.getElementById("personas");
 
 
-/* ===== FECHA MÍNIMA Y MÁXIMA ===== */
+/* =========================================================
+   DIRECCIÓN DEL BACKEND (API)
+   =========================================================
+   Aquí se encuentra tu servidor que procesa las reservas.
+*/
 
-const hoy = new Date();
-const hoyISO = hoy.toISOString().split("T")[0];
+const API = "http://127.0.0.1:3000/reservas";
 
-const maxFecha = new Date();
-maxFecha.setMonth(maxFecha.getMonth() + 1);
+
+/* =========================================================
+   CONFIGURAR FECHA: SOLO HASTA 30 DÍAS
+   =========================================================
+   Limitamos el calendario para que no permitan
+   fechas pasadas ni mayores a 30 días.
+*/
+
+const hoy = new Date();          // Fecha actual
+hoy.setHours(0, 0, 0, 0);        // Quitamos horas para precisión
+
+// Convertimos a formato: yyyy-mm-dd
+const minFecha = hoy.toISOString().split("T")[0];
+
+// Creamos fecha máxima (hoy + 30 días)
+const maxFecha = new Date(hoy);
+maxFecha.setDate(maxFecha.getDate() + 30);
+
 const maxISO = maxFecha.toISOString().split("T")[0];
 
-fecha.min = hoyISO;
+// Aplicamos límites al input
+fecha.min = minFecha;
 fecha.max = maxISO;
 
 
-/* ===== VALIDAR NOMBRE ===== */
+/* =========================================================
+   FUNCIÓN DE VALIDACIÓN GENERAL
+   =========================================================
+   Revisa que todos los campos estén completos
+   y que la fecha no pase los 30 días.
+*/
 
-function validarNombre() {
+function validar() {
 
-    const valor = nombre.value.trim();
-
-    const regex = /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/;
-
-    if (!regex.test(valor) || valor === "") {
-
-        nombre.classList.add("is-invalid");
-        nombre.classList.remove("is-valid");
+    // Validar campos vacíos
+    if (
+        !nombre.value ||
+        !telefono.value ||
+        !fecha.value ||
+        !inicio.value ||
+        !final.value ||
+        !personas.value
+    ) {
+        mostrarMensaje("Completa todos los campos", "danger");
         return false;
-
-    } else {
-
-        nombre.classList.remove("is-invalid");
-        nombre.classList.add("is-valid");
-        return true;
-    }
-
-}
-
-
-/* ===== VALIDAR TELÉFONO ===== */
-
-function validarTelefono() {
-
-    const valor = telefono.value;
-
-    const regex = /^9\d{8}$/;
-
-    if (!regex.test(valor)) {
-
-        telefono.classList.add("is-invalid");
-        telefono.classList.remove("is-valid");
-        return false;
-
-    } else {
-
-        telefono.classList.remove("is-invalid");
-        telefono.classList.add("is-valid");
-        return true;
-    }
-
-}
-
-
-/* ===== VALIDAR FECHA Y HORA ===== */
-
-function validarFechaHora() {
-
-    const fechaValor = fecha.value;
-    const horaInicio = inicio.value;
-    const horaFinal = final.value;
-
-    if (!fechaValor || !horaInicio || !horaFinal) return false;
-
-    const ahora = new Date();
-
-    const reservaInicio = new Date(`${fechaValor}T${horaInicio}`);
-    const reservaFinal = new Date(`${fechaValor}T${horaFinal}`);
-
-    const minimo = new Date(ahora.getTime() + 60000);
-
-
-    /* Validar inicio */
-
-    if (reservaInicio < minimo) {
-
-        inicio.classList.add("is-invalid");
-        inicio.classList.remove("is-valid");
-        return false;
-
-    } else {
-
-        inicio.classList.remove("is-invalid");
-        inicio.classList.add("is-valid");
-
     }
 
 
-    /* Validar final */
+    // Validar fecha máxima
+    const fechaElegida = new Date(fecha.value);
 
-    if (reservaFinal <= reservaInicio) {
+    const limite = new Date(hoy);
+    limite.setDate(limite.getDate() + 30);
 
-        final.classList.add("is-invalid");
-        final.classList.remove("is-valid");
+    if (fechaElegida > limite) {
+
+        mostrarMensaje("❌ Solo puedes reservar hasta 30 días", "danger");
         return false;
-
-    } else {
-
-        final.classList.remove("is-invalid");
-        final.classList.add("is-valid");
-
     }
 
     return true;
-
 }
 
 
-/* ===== EVENTOS ===== */
+/* =========================================================
+   MOSTRAR MENSAJES EN PANTALLA
+   =========================================================
+   Muestra alertas Bootstrap según el tipo.
+*/
 
-nombre.addEventListener("input", validarNombre);
-telefono.addEventListener("input", validarTelefono);
-inicio.addEventListener("change", validarFechaHora);
-final.addEventListener("change", validarFechaHora);
-fecha.addEventListener("change", validarFechaHora);
+function mostrarMensaje(texto, tipo) {
+
+    mensaje.className = `alert alert-${tipo}`; // danger, info, success...
+    mensaje.textContent = texto;              // Texto del mensaje
+    mensaje.classList.remove("d-none");       // Mostrar
+}
 
 
-/* ===== AL ENVIAR ===== */
+/* =========================================================
+   CONSULTAR MESAS DISPONIBLES
+   =========================================================
+   Envía datos al backend para saber qué mesas
+   están libres.
+*/
 
-form.addEventListener("submit", function (e) {
+async function obtenerMesas(datos) {
 
-    e.preventDefault();
+    try {
 
-    let ok = true;
+        const res = await fetch(API + "/disponibles", {
 
-    if (!validarNombre()) ok = false;
-    if (!validarTelefono()) ok = false;
-    if (!validarFechaHora()) ok = false;
+            method: "POST",
 
-    if (!ok) {
-        form.classList.add("was-validated");
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify(datos)
+
+        });
+
+        return await res.json();
+
+    } catch (error) {
+
+        mostrarMensaje("❌ No conecta con backend", "danger");
+        return null;
+    }
+}
+
+
+/* =========================================================
+   FUNCIÓN PARA CREAR UNA RESERVA
+   =========================================================
+   Envía los datos al backend para guardarlos.
+*/
+
+async function reservar(datos) {
+
+    try {
+
+        const res = await fetch(API + "/crear", {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify(datos)
+
+        });
+
+        return await res.json();
+
+    } catch (error) {
+
+        mostrarMensaje("❌ Error al reservar", "danger");
+        return null;
+    }
+}
+
+
+/* =========================================================
+   MOSTRAR BOTONES DE MESAS
+   =========================================================
+   Crea botones dinámicos para que el usuario
+   pueda elegir su mesa.
+*/
+
+function mostrarMesas(lista, datosBase) {
+
+    const cont = document.createElement("div");
+    cont.className = "mt-3";
+
+    cont.innerHTML = "<h5>Elige una mesa:</h5>";
+
+    // Recorremos todas las mesas
+    lista.forEach(mesa => {
+
+        const btn = document.createElement("button");
+
+        btn.className = "btn btn-outline-success m-1";
+        btn.textContent = "Mesa " + mesa;
+
+        // Evento al hacer clic
+        btn.onclick = async () => {
+
+            datosBase.mesa = mesa;
+
+            const r = await reservar(datosBase);
+
+            if (r.ok) {
+                mostrarConfirmacion(r);
+            }
+        };
+
+        cont.appendChild(btn);
+    });
+
+    form.appendChild(cont);
+}
+
+
+/* =========================================================
+   MOSTRAR CONFIRMACIÓN
+   =========================================================
+   Muestra los datos cuando la reserva fue exitosa.
+*/
+
+function mostrarConfirmacion(data) {
+
+    respuesta.classList.remove("d-none");
+
+    detalle.textContent = `
+        Mesa: ${data.mesa}
+        | Fecha: ${data.fecha}
+        | Hora: ${data.inicio}
+    `;
+
+    confetti(); // Animación
+}
+
+
+/* =========================================================
+   EVENTO SUBMIT DEL FORMULARIO
+   =========================================================
+   Controla qué pasa cuando se envía el formulario.
+*/
+
+form.addEventListener("submit", async (e) => {
+
+    e.preventDefault(); // Evita recarga
+
+    // Validar datos
+    if (!validar()) return;
+
+
+    // Detectar botón presionado
+    const accion = e.submitter.value;
+
+
+    // Datos a enviar
+    const datos = {
+
+        nombre: nombre.value,
+        telefono: telefono.value,
+        fecha: fecha.value,
+        inicio: inicio.value,
+        final: final.value,
+        personas: personas.value
+    };
+
+
+    mostrarMensaje("Consultando disponibilidad...", "info");
+
+
+    /* =============================================
+       PASO 1: CONSULTAR MESAS
+    ============================================= */
+
+    const res = await obtenerMesas(datos);
+
+    if (!res || !res.disponibles.length) {
+
+        mostrarMensaje("❌ No hay mesas libres", "warning");
         return;
     }
 
-    /* Detectar qué botón se presionó */
-    const boton = e.submitter.value;
 
-    if (boton === "azar") {
-        alert("Reserva al azar realizada ✅");
+    /* =============================================
+       PASO 2: RESERVA AL AZAR
+    ============================================= */
+
+    if (accion === "azar") {
+
+        const random =
+            res.disponibles[
+                Math.floor(Math.random() * res.disponibles.length)
+            ];
+
+        datos.mesa = random;
+
+        const r = await reservar(datos);
+
+        if (r.ok) {
+            mostrarConfirmacion(r);
+        }
     }
 
-    if (boton === "elegir") {
-        alert("Elegir mesa seleccionado ✅");
+
+    /* =============================================
+       PASO 3: ELEGIR MESA
+    ============================================= */
+
+    if (accion === "elegir") {
+
+        mostrarMensaje("Elige tu mesa 👇", "success");
+
+        mostrarMesas(res.disponibles, datos);
     }
 
 });
 
-
+});
